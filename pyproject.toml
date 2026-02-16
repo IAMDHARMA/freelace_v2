@@ -1,0 +1,20 @@
+[project]
+name = "freelance-v2"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "chromadb>=1.5.0",
+    "elevenlabs>=2.35.0",
+    "fastapi>=0.129.0",
+    "langchain>=1.2.10",
+    "langchain-community>=0.4.1",
+    "langchain-google-genai>=4.2.0",
+    "langchain-openai>=1.1.9",
+    "langdetect>=1.0.9",
+    "pgvector>=0.4.2",
+    "psycopg2-binary>=2.9.11",
+    "python-dotenv>=1.2.1",
+    "uvicorn>=0.40.0",
+]
