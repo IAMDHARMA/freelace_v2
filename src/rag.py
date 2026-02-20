@@ -3,32 +3,25 @@
 import os
 from dotenv import load_dotenv
 
-from langchain_groq import ChatGroq
 from langchain_postgres import PGVector
 from langchain_huggingface import HuggingFaceEmbeddings
-
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.runnables import RunnableLambda
+from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_community.chat_message_histories import PostgresChatMessageHistory
+
+from .llm import llm  # ✅ FIXED: Import shared LLM — no duplicate, no model mismatch
+
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+assert DATABASE_URL, "DATABASE_URL is not set in .env"
+
 COLLECTION_NAME = "ai_tutor_docs"
 
-# 🔥 Shared LLM
-llm = ChatGroq(
-    model="llama-3.1-8b-instant",
-    temperature=0,
-    max_tokens=200,
-    groq_api_key=os.getenv("GROQ_API_KEY")
-)
-
-# 🔥 Store chat sessions
-from langchain_community.chat_message_histories import PostgresChatMessageHistory
 
 def get_session_history(session_id: str):
+    """Return per-session PostgreSQL chat history store."""
     return PostgresChatMessageHistory(
         connection_string=DATABASE_URL,
         session_id=session_id,
@@ -36,10 +29,21 @@ def get_session_history(session_id: str):
     )
 
 
-def get_qa_chain():
+def format_docs(docs: list) -> str:
+    """
+    ✅ FIXED: Stringify retrieved Document objects into plain text.
+    Without this, raw Document objects are passed to the prompt template
+    and rendered as Python repr strings, not their actual content.
+    """
+    if not docs:
+        return ""
+    return "\n\n".join(doc.page_content for doc in docs)
 
+
+def get_qa_chain():
+    # ✅ FIXED: Same embedding model as ingest.py — must match or retrieval breaks
     embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
+        model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     )
 
     vectorstore = PGVector(
@@ -51,44 +55,47 @@ def get_qa_chain():
     retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
     prompt = ChatPromptTemplate.from_messages([
-    ("system",
-     "You are a friendly AI Tutor. "
-     "Explain concepts clearly, step-by-step, and in a simple way. "
-     "Encourage curiosity and learning."),
-    
-    ("system",
-     "Conversation History:\n{history}"),
-    
-    ("system",
-     "Retrieved Context:\n{context}"),
-    
-    ("system",
-     "Instructions:\n"
-     "- If the retrieved context contains relevant information, use it in your answer.\n"
-     "- If the context is empty or not relevant, answer using your general knowledge.\n"
-     "- Keep responses clear, concise, and beginner-friendly.\n"
-     "- If unsure, say so honestly."),
-    
-    ("human", "{question}")
-])
+        (
+            "system",
+            "You are a friendly English Tutor.\n"
+            "The student may ask questions in their native language.\n"
+            "Your job is to TEACH ENGLISH concepts: words, grammar, usage, and examples.\n\n"
+            "CRITICAL RULES:\n"
+            "- Always explain in {language} language so the student understands.\n"
+            "- Do NOT switch fully to English in your explanation.\n"
+            "- Use simple, beginner-friendly language.\n"
+            "- Give complete, detailed answers with examples.\n"
+            "- Never stop mid-sentence. Always finish your explanation fully.\n"
+        ),
+        (
+            "system",
+            "Relevant study material (use if helpful, ignore if empty or irrelevant):\n"
+            "{context}"
+        ),
+        # ✅ FIXED: History is injected here by RunnableWithMessageHistory
+        # Do NOT also set it in the inner lambda — that prevents injection from working
+        ("placeholder", "{history}"),
+        ("human", "{question}"),
+    ])
 
-
+    # ✅ FIXED: Context is properly formatted from Document objects to plain text
+    # ✅ FIXED: History key is NOT set in the inner dict — let RunnableWithMessageHistory handle it
     rag_chain = (
         {
-        "context": RunnableLambda(lambda x: x["question"]) | retriever,
-        "question": RunnableLambda(lambda x: x["question"]),
-        "history": RunnableLambda(lambda x: x.get("history", ""))
+            "context": RunnableLambda(lambda x: x["question"]) | retriever | RunnableLambda(format_docs),
+            "question": RunnableLambda(lambda x: x["question"]),
+            "language": RunnableLambda(lambda x: x.get("language", "English")),
         }
         | prompt
         | llm
     )
 
-    # ✅ Add Conversation History
+    # ✅ Wrap with conversation history — history_messages_key must match placeholder in prompt
     conversational_chain = RunnableWithMessageHistory(
         rag_chain,
         get_session_history,
         input_messages_key="question",
-        history_messages_key="history"
+        history_messages_key="history",
     )
 
     return conversational_chain

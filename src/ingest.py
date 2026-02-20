@@ -1,15 +1,22 @@
+# src/ingest.py
+
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_postgres import PGVector
-from langchain_core.documents import Document
-import os
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from dotenv import load_dotenv
+import os
 
 load_dotenv()
 
+# Validate env vars at startup
 DATABASE_URL = os.getenv("DATABASE_URL")
+assert DATABASE_URL, "DATABASE_URL is not set in .env"
 
+# ✅ FIXED: Same embedding model used in both ingest.py and rag.py
+# Must match exactly — different models produce incompatible vector dimensions
 embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
+    model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 )
 
 vectorstore = PGVector(
@@ -18,11 +25,18 @@ vectorstore = PGVector(
     embeddings=embeddings,
 )
 
-docs = [
-    Document(page_content="Dharmarajan completed BSc in Computer Science at Adam College of Arts and Science, Trichy."),
-    Document(page_content="Artificial Intelligence focuses on machine learning, deep learning and neural networks."),
-]
+# Load original document
+loader = PyPDFLoader("data/my_notes.pdf")
+docs = loader.load()
 
-vectorstore.add_documents(docs)
+# Split document
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=500,
+    chunk_overlap=100,
+)
+split_docs = text_splitter.split_documents(docs)
 
-print("Documents added successfully!")
+# Store in PGVector
+vectorstore.add_documents(split_docs)
+
+print(f"✅ Ingested {len(split_docs)} chunks into PGVector successfully!")

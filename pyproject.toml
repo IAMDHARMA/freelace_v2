@@ -1,20 +1,25 @@
 [project]
 name = "freelance-v2"
 version = "0.1.0"
-description = "Add your description here"
+description = "AI Tutor RAG Backend"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
+
 dependencies = [
-    "chromadb>=1.5.0",
-    "elevenlabs>=2.35.0",
     "fastapi>=0.129.0",
+    "uvicorn>=0.40.0",
+    "python-dotenv>=1.2.1",
+    "python-multipart>=0.0.22",
     "langchain>=1.2.10",
     "langchain-community>=0.4.1",
-    "langchain-google-genai>=4.2.0",
-    "langchain-openai>=1.1.9",
-    "langdetect>=1.0.9",
-    "pgvector>=0.4.2",
+    "langchain-postgres>=0.0.16",
+    "langchain-groq>=1.1.2",
+    "langchain-huggingface>=1.2.0",
+    "sentence-transformers>=2.6.0",
+    "pgvector==0.3.6",
     "psycopg2-binary>=2.9.11",
-    "python-dotenv>=1.2.1",
-    "uvicorn>=0.40.0",
+    "langdetect>=1.0.9",
+    "elevenlabs>=2.35.0",
+    "streamlit>=1.54.0",
+    "streamlit-mic-recorder>=0.0.8",
 ]
